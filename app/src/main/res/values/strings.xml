@@ -6,5 +6,15 @@
     <string name="action_settings">Settings</string>
     <string name="refresh" translatable="false">Refresh</string>
     <string name="title_activity_detail">DetailActivity</string>
+    <string name="settings_label">Settings</string>
+    <string name="pref_location_label">Location</string>
 
+    <string name="pref_location_key" translatable="false">location</string>
+    <string name="pref_location_default" translatable="false">94087</string>
+
+    <string name="pref_unit_label">Units</string>
+    <string name="pref_unit_key" translatable="false">unit</string>
+    <string name="pref_unit_default" translatable="false">metric</string>
+    <string name="pref_unit_imperial" translatable="false">imperial</string>
+    <string name="action_map">Find on Map</string>
 </resources>

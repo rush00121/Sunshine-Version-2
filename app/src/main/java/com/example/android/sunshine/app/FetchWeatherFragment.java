@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.text.format.Time;
 import android.util.Log;
@@ -31,7 +32,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -53,7 +53,7 @@ public class FetchWeatherFragment extends Fragment {
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.forecastfragment,menu);
+        inflater.inflate(R.menu.forecastfragment, menu);
     }
 
     @Override
@@ -61,18 +61,9 @@ public class FetchWeatherFragment extends Fragment {
                              Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_main, container, false);
 
-        String[]data = {"Today-Sunny -88/63",
-                "Monday-Sunny -89/63",
-                "Tuesday-Sunny -80/63",
-                "Thursday-Sunny -81/63",
-                "Friday-Sunny -82/63",
-                "Saturday-Sunny -83/63"};
+        List<String> dataList = new ArrayList<String>();
 
-
-
-       List<String> dataList = new ArrayList<String>(Arrays.asList(data));
-
-        arrayAdapter = new ArrayAdapter<String>(getActivity(),R.layout.list_item_forecast,R.id.list_item_forecast_textview,dataList);
+        arrayAdapter = new ArrayAdapter<String>(getActivity(), R.layout.list_item_forecast, R.id.list_item_forecast_textview, dataList);
 
         ListView listView = (ListView) rootView.findViewById(R.id.listview_forecast);
         listView.setAdapter(arrayAdapter);
@@ -92,25 +83,40 @@ public class FetchWeatherFragment extends Fragment {
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        updateData();
+    }
+
+    @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        if(id==R.id.action_refresh) {
-            new FetchWeatherTask().execute("94087");
+        if (id == R.id.action_refresh) {
+            updateData();
             return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
+    private void updateData() {
+        String location = PreferenceManager.getDefaultSharedPreferences(getActivity()).getString(getString(R.string.pref_location_key)
+                , getString(R.string.pref_location_default));
+
+        String units = PreferenceManager.getDefaultSharedPreferences(getActivity()).getString(getString(R.string.pref_unit_key)
+                , getString(R.string.pref_unit_default));
+
+        new FetchWeatherTask().execute(location,units);
+    }
 
 
-    class FetchWeatherTask extends AsyncTask<String,Void,String[]>{
+    class FetchWeatherTask extends AsyncTask<String, Void, String[]> {
 
         String LOG_TAG = FetchWeatherTask.class.getSimpleName();
 
         @Override
         protected void onPostExecute(String[] strings) {
             arrayAdapter.clear();
-            for(String data:strings) {
+            for (String data : strings) {
                 arrayAdapter.add(data);
             }
         }
@@ -120,35 +126,42 @@ public class FetchWeatherFragment extends Fragment {
             // These two need to be declared outside the try/catch
 // so that they can be closed in the finally block.
             String postCode = params[0];
+            String units = params[1];
             HttpURLConnection urlConnection = null;
             BufferedReader reader = null;
 
 // Will contain the raw JSON response as a string.
+
             String forecastJsonStr = null;
+
+            String format = "json";
+            int numDays = 7;
 
             try {
                 // Construct the URL for the OpenWeatherMap query
                 // Possible parameters are available at OWM's forecast API page, at
                 // http://openweathermap.org/API#forecast
-                final String baseURI = "http://api.openweathermap.org/data/2.5/forecast/daily?";
-                String queryURI = "q";
-                String modeURI = "mode";
-                String unitURI = "unit";
-                String countURI = "cnt";
+                // Construct the URL for the OpenWeatherMap query
+                // Possible parameters are avaiable at OWM's forecast API page, at
+                // http://openweathermap.org/API#forecast
+                final String FORECAST_BASE_URL =
+                        "http://api.openweathermap.org/data/2.5/forecast/daily?";
+                final String QUERY_PARAM = "q";
+                final String FORMAT_PARAM = "mode";
+                final String UNITS_PARAM = "units";
+                final String DAYS_PARAM = "cnt";
 
-                int count = 7;
-                String unit = "metric";
-                String mode = "json";
-
-                Uri builtUri = Uri.parse(baseURI).buildUpon().
-                        appendQueryParameter(queryURI,postCode).
-                                appendQueryParameter(modeURI,mode).
-                                appendQueryParameter(countURI,Integer.toString(count)).
-                        appendQueryParameter(unitURI,unit).build();
+                Uri builtUri = Uri.parse(FORECAST_BASE_URL).buildUpon()
+                        .appendQueryParameter(QUERY_PARAM, params[0])
+                        .appendQueryParameter(FORMAT_PARAM, format)
+                        .appendQueryParameter(UNITS_PARAM, units)
+                        .appendQueryParameter(DAYS_PARAM, Integer.toString(numDays))
+                        .build();
 
                 URL url = new URL(builtUri.toString());
 
-                Log.v(LOG_TAG,"Built URI : "+url.toString());
+
+                Log.v(LOG_TAG, "Built URI : " + url.toString());
 
                 // Create the request to OpenWeatherMap, and open the connection
                 urlConnection = (HttpURLConnection) url.openConnection();
@@ -178,7 +191,7 @@ public class FetchWeatherFragment extends Fragment {
                 }
                 forecastJsonStr = buffer.toString();
 
-                return getWeatherDataFromJson(forecastJsonStr,count);
+                return getWeatherDataFromJson(forecastJsonStr, numDays,units);
             } catch (Exception e) {
                 Log.e(LOG_TAG, "Error ", e);
                 // If the code didn't successfully get the weather data, there's no point in attempting
@@ -205,17 +218,22 @@ public class FetchWeatherFragment extends Fragment {
         /* The date/time conversion code is going to be moved outside the asynctask later,
          * so for convenience we're breaking it out into its own method now.
          */
-        private String getReadableDateString(long time){
+        private String getReadableDateString(long time) {
             // Because the API returns a unix timestamp (measured in seconds),
             // it must be converted to milliseconds in order to be converted to valid date.
             SimpleDateFormat shortenedDateFormat = new SimpleDateFormat("EEE MMM dd");
             return shortenedDateFormat.format(time);
         }
 
-        /**
-         * Prepare the weather high/lows for presentation.
-         */
-        private String formatHighLows(double high, double low) {
+        private String formatHighLows(double high, double low, String unitType) {
+
+            if (unitType.equals(getString(R.string.pref_unit_imperial))) {
+                high = (high * 1.8) + 32;
+                low = (low * 1.8) + 32;
+            } else if (!unitType.equals(getString(R.string.pref_location_default))) {
+                Log.d(LOG_TAG, "Unit type not found: " + unitType);
+            }
+
             // For presentation, assume the user doesn't care about tenths of a degree.
             long roundedHigh = Math.round(high);
             long roundedLow = Math.round(low);
@@ -223,15 +241,14 @@ public class FetchWeatherFragment extends Fragment {
             String highLowStr = roundedHigh + "/" + roundedLow;
             return highLowStr;
         }
-
         /**
          * Take the String representing the complete forecast in JSON Format and
          * pull out the data we need to construct the Strings needed for the wireframes.
-         *
+         * <p/>
          * Fortunately parsing is easy:  constructor takes the JSON string and converts it
          * into an Object hierarchy for us.
          */
-        private String[] getWeatherDataFromJson(String forecastJsonStr, int numDays)
+        private String[] getWeatherDataFromJson(String forecastJsonStr, int numDays,String unit)
                 throws JSONException {
 
             // These are the names of the JSON objects that need to be extracted.
@@ -263,7 +280,7 @@ public class FetchWeatherFragment extends Fragment {
             dayTime = new Time();
 
             String[] resultStrs = new String[numDays];
-            for(int i = 0; i < weatherArray.length(); i++) {
+            for (int i = 0; i < weatherArray.length(); i++) {
                 // For now, using the format "Day, description, hi/low"
                 String day;
                 String description;
@@ -277,7 +294,7 @@ public class FetchWeatherFragment extends Fragment {
                 // "this saturday".
                 long dateTime;
                 // Cheating to convert this to UTC time, which is what we want anyhow
-                dateTime = dayTime.setJulianDay(julianStartDay+i);
+                dateTime = dayTime.setJulianDay(julianStartDay + i);
                 day = getReadableDateString(dateTime);
 
                 // description is in a child array called "weather", which is 1 element long.
@@ -290,7 +307,7 @@ public class FetchWeatherFragment extends Fragment {
                 double high = temperatureObject.getDouble(OWM_MAX);
                 double low = temperatureObject.getDouble(OWM_MIN);
 
-                highAndLow = formatHighLows(high, low);
+                highAndLow = formatHighLows(high, low,unit);
                 resultStrs[i] = day + " - " + description + " - " + highAndLow;
             }
 
